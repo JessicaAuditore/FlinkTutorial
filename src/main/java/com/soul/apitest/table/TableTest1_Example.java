@@ -1,0 +1,39 @@
+package com.soul.apitest.table;
+
+import com.soul.apitest.beans.SensorReading;
+import org.apache.flink.streaming.api.datastream.DataStream;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.Table;
+import org.apache.flink.table.api.java.StreamTableEnvironment;
+import org.apache.flink.types.Row;
+
+public class TableTest1_Example {
+
+    public static void main(String[] args) throws Exception {
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.setParallelism(1);
+        DataStream<String> inputStream = env.readTextFile("src/main/resources/sensor.txt");
+
+        DataStream<SensorReading> dataStream = inputStream.map(line -> {
+            String[] fields = line.split(",");
+            return new SensorReading(fields[0], new Long(fields[1]), new Double(fields[2]));
+        });
+
+        // 创建表环境
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+
+        // Table API
+        Table dataTable = tableEnv.fromDataStream(dataStream);
+        Table resultTable = dataTable.select("id, temperature").where("id = 'sensor_1'");
+
+        // Flink SQL
+        tableEnv.createTemporaryView("sensor", dataTable);
+        String sql = "select id, temperature from sensor where id = 'sensor_1'";
+        Table resultSqlQuery = tableEnv.sqlQuery(sql);
+
+        tableEnv.toAppendStream(resultTable, Row.class).print("result");
+        tableEnv.toAppendStream(resultSqlQuery, Row.class).print("sql");
+
+        env.execute();
+    }
+}
